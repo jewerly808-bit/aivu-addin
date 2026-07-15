@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- office.js: Pflicht, damit Outlook das Add-in startet (sonst weiße Seite / "Add-In-Fehler").
+     Der Stub ist der Fallback für die lokale Browser-Demo (läuft ohne Office-Host). -->
+<script>
+  if (typeof Office === 'undefined') { window.Office = { onReady:function(cb){ if(cb) cb({host:null}); }, context:null }; }
+</script>
+<script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js" type="text/javascript"></script>
+<title>aivu Auftragsassistent · Richter Medien</title>
+<style>
+@font-face{font-family:'Hanken Grotesk Variable';font-style:normal;font-display:swap;font-weight:100 900;
+  src:url('media/fonts/hanken-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:'Hanken Grotesk Variable';font-style:normal;font-display:swap;font-weight:100 900;
+  src:url('media/fonts/hanken-latin-ext.woff2') format('woff2');
+  unicode-range:U+0100-024F,U+0259,U+1E00-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;}
+:root{
+  --brand:#3b5bff; --brand-600:#2f49e6; --brand-700:#2439bf;
+  --brand-50:#eef2ff; --brand-100:#e1e8ff; --brand-200:#c7d3ff;
+  --cyan:#1aa7ec; --cyan-50:#e7f6fe;
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#f6f8fa; --bg-3:#eef1f6;
+  --text:#1a1f36; --text-2:#525c6e; --text-3:#748094;
+  --border:#e9ebf0; --border-2:#f1f2f6; --border-strong:#dde1e9; --border-light:#f1f2f6;
+  --green:#16A34A; --green-bg:#e8f7ee; --green-text:#0e6b33; --green-border:#bbe7c8;
+  --amber:#936211; --amber-bg:#fdf3e1; --amber-border:#f3ddb0;
+  --red:#c41f2b; --red-bg:#fdeaec;
+  --code-bg:#0d1530; --code-fg:#c8d3f5;
+  --sh-sm:0 2px 8px rgba(20,24,40,.06);
+  --sh-md:0 4px 16px rgba(20,24,40,.09),0 1px 4px rgba(20,24,40,.05);
+  --sh-lg:0 24px 64px rgba(16,20,48,.30),0 8px 22px rgba(16,20,48,.14);
+  --r:7px; --r-sm:5px; --pill:999px;
+  --t:150ms cubic-bezier(.2,0,.2,1);
+  --sans:'Hanken Grotesk Variable',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'Geist Mono Variable','SF Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:#dfe4ee;color:var(--text);font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01";display:flex;align-items:center;justify-content:center}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea{font-family:inherit;font-size:inherit;color:inherit}
+::selection{background:var(--brand-100);color:var(--brand-700)}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:var(--r-sm)}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:#d3d8e2;border-radius:7px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ═══ FRAME (Outlook-Taskpane, ~400px) ═══ */
+.frame{width:400px;height:min(868px,100vh);background:var(--surface);position:relative;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:var(--sh-lg)}
+@media(min-height:900px){.frame{border-radius:16px}}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes scanY{0%{top:-42%}100%{top:100%}}
+@keyframes dots{0%,20%{content:"·"}40%{content:"··"}60%,100%{content:"···"}}
+@keyframes gridDrift{from{background-position:0 0}to{background-position:34px 34px}}
+@keyframes blob{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(22px,-16px) scale(1.12)}}
+@keyframes loginIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%)}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* ═══ LOGIN ═══ */
+.login{position:absolute;inset:0;background:var(--code-bg);display:flex;align-items:center;justify-content:center;
+  padding:26px;z-index:50;overflow:hidden;transition:opacity .4s ease}
+.login.gone{opacity:0;pointer-events:none}
+.login-grid{position:absolute;inset:0;opacity:.5;
+  background-image:linear-gradient(rgba(120,140,255,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(120,140,255,.09) 1px,transparent 1px);
+  background-size:34px 34px;animation:gridDrift 8s linear infinite}
+.login-blob{position:absolute;border-radius:50%;filter:blur(46px);opacity:.55}
+.blob1{width:230px;height:230px;background:#3b5bff;top:-60px;right:-60px;animation:blob 11s ease-in-out infinite}
+.blob2{width:200px;height:200px;background:#7c5cfc;bottom:-50px;left:-50px;animation:blob 13s ease-in-out infinite reverse}
+.login-card{position:relative;width:100%;max-width:320px;animation:loginIn .6s cubic-bezier(.2,0,.2,1)}
+.login-logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:26px}
+.login-mark{width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:19px;box-shadow:0 4px 16px rgba(59,91,255,.5)}
+.login-word{font-size:23px;font-weight:800;letter-spacing:-.02em;color:#fff}
+.login-badge{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:#a9b6ff;
+  background:rgba(120,140,255,.13);border:1px solid rgba(120,140,255,.25);padding:5px 12px;border-radius:var(--pill);margin-bottom:14px}
+.login-badge span{color:#6ee7a0;font-size:9px}
+.login-inner{text-align:center;margin-bottom:22px}
+.login-title{font-size:20px;font-weight:700;color:#fff;margin-bottom:5px}
+.login-sub{font-size:13px;color:#8b96b8}
+.login-field{margin-bottom:13px}
+.login-label{display:block;font-size:12px;font-weight:600;color:#aab4d4;margin-bottom:6px}
+.login-input{width:100%;padding:11px 13px;background:rgba(255,255,255,.06);border:1px solid rgba(150,165,220,.22);
+  border-radius:var(--r);color:#fff;font-size:14px;transition:border-color var(--t)}
+.login-input:focus{border-color:var(--brand)}
+.login-input::placeholder{color:#5f6a8c}
+.login-btn{width:100%;padding:12px;background:var(--brand);color:#fff;border-radius:var(--r);font-size:14.5px;font-weight:700;
+  margin-top:8px;transition:background var(--t)}
+.login-btn:hover{background:var(--brand-600)}
+.login-foot{text-align:center;font-size:11.5px;color:#5f6a8c;margin-top:20px}
+
+/* ═══ APP ═══ */
+.app{flex:1;display:none;flex-direction:column;min-height:0}
+.app.on{display:flex}
+
+/* Tabs */
+.tabs{flex:0 0 auto;display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 8px}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px 4px;font-size:12.5px;font-weight:600;
+  color:var(--text-3);border-bottom:2px solid transparent;transition:color var(--t),border-color var(--t)}
+.tab:hover{color:var(--text-2)}
+.tab.active{color:var(--brand-700);border-bottom-color:var(--brand)}
+.tab .tstep{width:16px;height:16px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);
+  font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+.tab.active .tstep{background:var(--brand);border-color:var(--brand);color:#fff}
+
+.panes{flex:1;position:relative;min-height:0}
+.pane{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;padding:16px}
+.pane.active{display:flex;animation:fadeIn .28s var(--t)}
+.pane>*{flex-shrink:0}
+
+.slabel{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px}
+
+/* Email card */
+.mail{border:1px solid var(--border);border-radius:var(--r);background:var(--surface);overflow:hidden;position:relative}
+.mail.scan::after{content:"";position:absolute;left:0;right:0;height:42%;top:-42%;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(59,91,255,.16),transparent);animation:scanY 1.15s cubic-bezier(.4,0,.6,1) infinite}
+.mail-hd{display:flex;align-items:center;gap:10px;padding:12px 13px}
+.mail-av{width:34px;height:34px;border-radius:50%;background:var(--brand-100);color:var(--brand-700);display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:13px;flex-shrink:0}
+.mail-name{font-size:13px;font-weight:650}
+.mail-addr{font-size:11.5px;color:var(--text-3)}
+.mail-time{margin-left:auto;font-size:11.5px;color:var(--text-3);flex-shrink:0}
+.mail-subj{padding:0 13px 11px;font-size:13px;font-weight:600;color:var(--text)}
+.mail-att{margin:0 13px 12px;display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm)}
+.att-ico{width:26px;height:26px;border-radius:5px;background:var(--red-bg);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;flex-shrink:0}
+.att-nm{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.att-sz{font-size:10.5px;color:var(--text-3)}
+
+/* AI summary */
+.ai{margin-top:14px;border:1px solid var(--brand-100);background:var(--brand-50);border-radius:var(--r);padding:12px 13px}
+.ai-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ai-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--brand-700)}
+.ai-dot{width:7px;height:7px;border-radius:50%;background:var(--brand);animation:pulse 1.3s ease-in-out infinite}
+.ai-spin{width:13px;height:13px;border:2px solid var(--brand-200);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
+.ai-txt{font-size:12.5px;line-height:1.5;color:var(--text-2)}
+.ai-txt b{color:var(--brand-700);font-weight:700}
+.ai-load::after{content:"···";animation:dots 1.2s steps(1) infinite;margin-left:1px;letter-spacing:1px}
+
+/* Product chip */
+.prod-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border-strong);border-radius:var(--r);
+  background:var(--surface);font-size:13px;font-weight:650;width:100%}
+.prod-chip svg{width:16px;height:16px;stroke-width:1.8;color:var(--brand-700)}
+.prod-chip .ok{margin-left:auto;color:var(--green);width:15px;height:15px}
+
+/* Params (editable) */
+.params{display:flex;flex-direction:column;gap:6px}
+.prow{display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);
+  cursor:pointer;animation:rowIn .34s var(--t) backwards;transition:border-color var(--t),background var(--t)}
+.prow:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.prow.miss{border-color:var(--amber-border);background:var(--amber-bg)}
+.prow.miss:hover{background:#fbead0}
+.prow.edited{border-color:var(--brand-200)}
+.picon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.picon svg{width:15px;height:15px;stroke-width:2.2}
+.picon.ok{background:var(--green-bg);color:var(--green)}
+.picon.miss{background:#fbead0;color:var(--amber)}
+.picon.edit{background:var(--brand-50);color:var(--brand-700)}
+.pbody{flex:1;min-width:0}
+.pname{font-size:12px;color:var(--text-3);font-weight:500}
+.pval{font-size:13px;font-weight:600;color:var(--text)}
+.pval.miss{color:var(--amber)}
+.pstat{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;padding:2px 7px;border-radius:var(--pill);flex-shrink:0}
+.pstat.ok{color:var(--green-text);background:var(--green-bg)}
+.pstat.miss{color:var(--amber);background:#fbead0}
+.pstat.edit{color:var(--brand-700);background:var(--brand-50)}
+.pedit{width:28px;height:28px;border-radius:var(--r-sm);color:var(--text-3);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background var(--t),color var(--t)}
+.pedit svg{width:14px;height:14px;stroke-width:1.9}
+.pedit:hover{background:var(--bg-3);color:var(--brand-700)}
+.skel{height:47px;border:1px solid var(--border);border-radius:var(--r);background:linear-gradient(90deg,var(--surface-2) 25%,#eef1f6 50%,var(--surface-2) 75%);
+  background-size:200% 100%;animation:shimmer 1.3s linear infinite}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 15px;border-radius:var(--r);font-size:13px;font-weight:650;transition:background var(--t),border-color var(--t),transform var(--t)}
+.btn svg{width:16px;height:16px;stroke-width:2}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-600)}
+.btn-ghost{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-erp{background:var(--brand);color:#fff}
+.btn-erp:hover{background:var(--brand-600)}
+.cta{display:flex;gap:9px;margin-top:16px}
+.cta .btn{flex:1}
+
+/* Antwort */
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
+.chip-q{padding:8px 12px;border:1px solid var(--border-strong);border-radius:var(--pill);font-size:12px;font-weight:600;color:var(--text-2);background:var(--surface);transition:all var(--t)}
+.chip-q:hover{border-color:var(--brand-200);color:var(--brand-700)}
+.chip-q.active{background:var(--brand-50);border-color:var(--brand-200);color:var(--brand-700)}
+.tone{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.tone .chip-q{padding:6px 11px;font-size:11.5px}
+.reply-wrap{flex:1;position:relative;display:flex;flex-direction:column;min-height:220px}
+.reply{flex:1;width:100%;border:1px solid var(--border-strong);border-radius:var(--r);padding:13px;font-size:13px;line-height:1.62;color:var(--text);
+  resize:none;background:var(--surface);transition:border-color var(--t)}
+.reply:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-100)}
+.reply-foot{display:flex;gap:8px;margin-top:12px;flex-shrink:0}
+.reply-foot .btn-erp{flex:1}
+.gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);display:none;
+  align-items:center;justify-content:center;flex-direction:column;gap:11px;border-radius:var(--r);z-index:5}
+.gen-overlay.on{display:flex}
+.gen-overlay .ai-spin{width:22px;height:22px;border-width:3px}
+.gen-txt{font-size:12.5px;font-weight:600;color:var(--brand-700)}
+
+/* ERP */
+.erp-state{display:none;flex-direction:column;animation:fadeIn .3s var(--t)}
+.erp-state.on{display:flex}
+.erp-load{text-align:center;padding:44px 20px}
+.erp-load .ai-spin{width:34px;height:34px;border-width:3px;margin:0 auto 16px}
+.erp-load-t{font-size:15px;font-weight:700;margin-bottom:5px}
+.erp-load-s{font-size:12.5px;color:var(--text-3);line-height:1.5}
+.card{border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.card-hd{display:flex;align-items:center;gap:8px;padding:11px 13px;background:var(--green-bg);border-bottom:1px solid var(--green-border)}
+.card-hd svg{width:17px;height:17px;stroke-width:2;color:var(--green)}
+.card-hd b{font-size:13px;font-weight:700;color:var(--green-text)}
+.card-bd{padding:14px 13px;display:flex;flex-direction:column;gap:12px}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--text-3);margin-bottom:4px}
+.fld-v{padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-weight:600}
+.fld-row{display:flex;gap:10px}.fld-row .fld{flex:1}
+.reason{font-size:12px;color:var(--text-2);line-height:1.5;font-weight:400!important}
+/* ERP-Parameter (unterhalb der KI-Begründung) */
+.psum-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:2px;display:flex;align-items:center;gap:7px}
+.psum-h svg{width:13px;height:13px;stroke-width:2;color:var(--brand)}
+.psum{border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);padding:4px 11px}
+.psum-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-2)}
+.psum-row:last-child{border-bottom:none}
+.psum-k{font-size:12px;color:var(--text-2)}
+.psum-v{font-size:12px;font-weight:600;font-family:var(--mono);text-align:right;color:var(--text)}
+.psum-v.miss{color:var(--amber);font-family:var(--sans)}
+.psum-v.edit{color:var(--brand-700)}
+.erp-success{text-align:center;padding:34px 20px;animation:fadeIn .4s var(--t)}
+.suc-ico{width:64px;height:64px;border-radius:50%;background:var(--green-bg);color:var(--green);display:flex;align-items:center;justify-content:center;
+  margin:0 auto 18px;animation:pop .5s cubic-bezier(.2,.9,.3,1.4)}
+.suc-ico svg{width:34px;height:34px;stroke-width:2.6}
+.suc-t{font-size:18px;font-weight:750;margin-bottom:6px}
+.suc-s{font-size:13px;color:var(--text-2);line-height:1.55;margin-bottom:14px}
+.suc-no{display:inline-block;font-family:var(--mono);font-size:13px;font-weight:600;color:var(--brand-700);background:var(--brand-50);border:1px solid var(--brand-100);
+  padding:7px 14px;border-radius:var(--r);margin-bottom:22px}
+
+/* Edit-Sheet */
+.sheet-ov{position:absolute;inset:0;background:rgba(16,20,38,.42);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);display:none;align-items:flex-end;z-index:60}
+.sheet-ov.open{display:flex;animation:fadeIn .2s var(--t)}
+.sheet{width:100%;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:0 -10px 34px rgba(16,20,48,.24);max-height:90%;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)}
+.sheet-handle{width:38px;height:4px;border-radius:2px;background:var(--border-strong);margin:9px auto 2px}
+.sheet-head{padding:6px 18px 13px;border-bottom:1px solid var(--border)}
+.sheet-title{font-size:16px;font-weight:700}
+.sheet-sub{font-size:12px;color:var(--text-3);margin-top:2px}
+.sheet-body{padding:15px 18px;overflow-y:auto}
+.sheet-foot{padding:12px 18px;border-top:1px solid var(--border);background:var(--surface-2);display:flex;gap:10px}
+.sheet-foot .btn{flex:1}
+.optlist{display:flex;flex-direction:column;gap:7px}
+.optrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--border-strong);border-radius:var(--r);cursor:pointer;transition:border-color var(--t),background var(--t)}
+.optrow:hover{border-color:var(--brand-200);background:var(--surface-2)}
+.optrow.sel{border-color:var(--brand);background:var(--brand-50)}
+.optradio{width:18px;height:18px;border-radius:50%;border:2px solid var(--border-strong);flex-shrink:0;position:relative;transition:border-color var(--t)}
+.optrow.sel .optradio{border-color:var(--brand)}
+.optrow.sel .optradio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--brand)}
+.optlabel{font-size:13.5px;font-weight:600}
+.optrow.sel .optlabel{color:var(--brand-700)}
+.sheet-field label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+.sheet-inp{width:100%;padding:11px 13px;border:1px solid var(--border-strong);border-radius:var(--r);font-size:14.5px;transition:border-color var(--t),box-shadow var(--t)}
+.sheet-inp:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-100)}
+.sheet-hint{font-size:11.5px;color:var(--text-3);margin-top:9px}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:11px 18px;border-radius:var(--pill);
+  font-size:13px;font-weight:600;display:none;align-items:center;gap:9px;box-shadow:var(--sh-lg);z-index:100;max-width:360px}
+.toast.show{display:flex;animation:toastIn .3s var(--t)}
+.toast svg{width:16px;height:16px;stroke-width:2.4;color:#6ee7a0;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <!-- ═══════ LOGIN ═══════ -->
+  <div class="login" id="login">
+    <div class="login-grid"></div>
+    <div class="login-blob blob1"></div>
+    <div class="login-blob blob2"></div>
+    <div class="login-card">
+      <div class="login-logo"><div class="login-mark">a</div><div class="login-word">aivu</div></div>
+      <div class="login-inner">
+        <div class="login-badge"><span>●</span> Auftragsassistent</div>
+        <div class="login-title">Anmelden</div>
+        <div class="login-sub">KI-gestützte Auftragserfassung für Outlook</div>
+      </div>
+      <div class="login-field"><label class="login-label">E-Mail</label>
+        <input class="login-input" type="email" id="loginEmail" value="hello@aivu.ch"></div>
+      <div class="login-field"><label class="login-label">Passwort</label>
+        <input class="login-input" type="password" id="loginPw" value="••••••••••"></div>
+      <button class="login-btn" onclick="doLogin()">Anmelden</button>
+      <div class="login-foot">aivu · Auftragsassistent v1.0 &bull; hello@aivu.ch</div>
+    </div>
+  </div>
+
+  <!-- ═══════ APP ═══════ -->
+  <div class="app" id="app">
+    <div class="tabs">
+      <button class="tab active" data-tab="home" onclick="switchTab('home')"><span class="tstep">1</span> Home</button>
+      <button class="tab" data-tab="erp" onclick="switchTab('erp')"><span class="tstep">2</span> ERP laden</button>
+      <button class="tab" data-tab="antwort" onclick="switchTab('antwort')"><span class="tstep">3</span> E-Mail-Antwort</button>
+    </div>
+
+    <div class="panes">
+
+      <!-- ─── HOME (Analyse) ─── -->
+      <div class="pane active" id="pane-home">
+        <div class="mail" id="mailCard">
+          <div class="mail-hd">
+            <div class="mail-av" id="mAv">TR</div>
+            <div style="min-width:0">
+              <div class="mail-name" id="mName">Thomas Richter</div>
+              <div class="mail-addr" id="mAddr">t.richter@richter-medien.de</div>
+            </div>
+            <div class="mail-time" id="mTime">08:40</div>
+          </div>
+          <div class="mail-subj" id="mSubj">Bestellung Hardcover-Katalog – RM-2026-0412</div>
+          <div id="mAttWrap"></div>
+        </div>
+
+        <div class="ai">
+          <div class="ai-hd"><span class="ai-chip"><span class="ai-dot" id="aiDot"></span> KI-Analyse</span></div>
+          <div class="ai-txt" id="aiTxt">Analyse wird gestartet …</div>
+        </div>
+
+        <div style="margin-top:16px" id="prodWrap" hidden>
+          <div class="slabel">Erkanntes Produkt</div>
+          <button class="prod-chip">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            <span id="prodName">Hardcover-Katalog</span>
+            <svg class="ok" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" d="M5 13l4 4L19 7"/></svg>
+          </button>
+        </div>
+
+        <div style="margin-top:16px" id="paramsWrap" hidden>
+          <div class="slabel" id="paramsLbl">Extrahierte Parameter</div>
+          <div class="params" id="params"></div>
+        </div>
+
+        <div class="cta" id="homeCta" hidden>
+          <button class="btn btn-ghost" onclick="runAnalysis()" style="flex:0 0 auto">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Neu</button>
+          <button class="btn btn-primary" onclick="switchTab('erp')">
+            Weiter: In ERP laden
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></button>
+        </div>
+      </div>
+
+      <!-- ─── ERP LADEN ─── -->
+      <div class="pane" id="pane-erp">
+        <div class="slabel">ERP-Übernahme · MultiPress</div>
+
+        <div class="erp-state on" id="erpIdentifying">
+          <div class="erp-load"><div class="ai-spin"></div>
+            <div class="erp-load-t">Kunde wird identifiziert …</div>
+            <div class="erp-load-s">Die KI gleicht den Absender mit den Kundendaten in MultiPress ab</div></div>
+        </div>
+
+        <div class="erp-state" id="erpConfirm">
+          <div class="card">
+            <div class="card-hd"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><b>Kunde erkannt</b></div>
+            <div class="card-bd">
+              <div class="fld"><label>Firma</label><div class="fld-v" id="cCompany">Richter Medien GmbH</div></div>
+              <div class="fld-row">
+                <div class="fld"><label>Kunde in MultiPress</label><div class="fld-v" id="cRelation">Kundennr. 20517</div></div>
+                <div class="fld"><label>Zuordnung</label><div class="fld-v" id="cConf" style="color:var(--green-text)">99 %</div></div>
+              </div>
+              <div class="fld"><label>KI-Begründung</label><div class="fld-v reason" id="cReason">…</div></div>
+              <div>
+                <div class="psum-h"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg> Auftragsdaten · werden angelegt</div>
+                <div class="psum" id="erpParams"></div>
+              </div>
+            </div>
+          </div>
+          <div class="cta">
+            <button class="btn btn-ghost" onclick="switchTab('home')" style="flex:0 0 auto">Zurück</button>
+            <button class="btn btn-erp" onclick="erpCreate()">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Auftrag anlegen</button>
+          </div>
+        </div>
+
+        <div class="erp-state" id="erpCreating">
+          <div class="erp-load"><div class="ai-spin"></div>
+            <div class="erp-load-t">Auftrag wird angelegt …</div>
+            <div class="erp-load-s">Übertragung an MultiPress über gesicherte Verbindung</div></div>
+        </div>
+
+        <div class="erp-state" id="erpSuccess">
+          <div class="erp-success">
+            <div class="suc-ico"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
+            <div class="suc-t">Auftrag angelegt</div>
+            <div class="suc-s">Der Auftrag wurde in den<br>MultiPress-Internet-Puffer geschrieben.</div>
+            <div class="suc-no" id="bufferNo">Puffer-Nr.: MP-24818</div>
+            <div><button class="btn btn-primary" onclick="switchTab('antwort')">Weiter: E-Mail-Antwort
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── E-MAIL-ANTWORT ─── -->
+      <div class="pane" id="pane-antwort">
+        <div class="slabel">Schnellantwort</div>
+        <div class="chips">
+          <button class="chip-q active" data-kind="angebot" onclick="pickReply(this)">Angebot erstellen</button>
+          <button class="chip-q" data-kind="rueckfrage" onclick="pickReply(this)">Rückfrage stellen</button>
+          <button class="chip-q" data-kind="bestaetigen" onclick="pickReply(this)">Auftrag bestätigen</button>
+        </div>
+        <div class="tone">
+          <span class="slabel" style="margin:0">Ton</span>
+          <button class="chip-q active" onclick="setTone(this)">Formell</button>
+          <button class="chip-q" onclick="setTone(this)">Freundlich</button>
+          <button class="chip-q" onclick="setTone(this)">Kurz</button>
+        </div>
+        <div class="reply-wrap">
+          <textarea class="reply" id="replyText" placeholder="Antwort wird generiert …"></textarea>
+          <div class="gen-overlay" id="genOverlay"><div class="ai-spin"></div><div class="gen-txt">KI schreibt die Antwort …</div></div>
+        </div>
+        <div class="reply-foot">
+          <button class="btn btn-ghost" onclick="regenReply()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
+          <button class="btn btn-erp" onclick="insertReply()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+            In Outlook einfügen</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════ PARAMETER-BEARBEITEN (Sheet) ═══════ -->
+  <div class="sheet-ov" id="paramSheet" onclick="if(event.target===this)closeParamSheet()">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div class="sheet-title" id="psTitle">Parameter</div>
+        <div class="sheet-sub" id="psSub">KI-Erkennung prüfen oder überschreiben</div>
+      </div>
+      <div class="sheet-body" id="psBody"></div>
+      <div class="sheet-foot">
+        <button class="btn btn-ghost" onclick="closeParamSheet()">Abbrechen</button>
+        <button class="btn btn-primary" onclick="saveParamEdit()">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span id="toastMsg">Erledigt</span></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   DEMO-KONFIGURATION  —  einziges Objekt, das sich je Mail ändert.
+   Add-in 2 (Richter/PDF) ist ein reiner Swap dieses Blocks.
+   ═══════════════════════════════════════════════════════════ */
+const DEMO={
+  variant:'pdf',
+  sender:{name:'Thomas Richter',email:'t.richter@richter-medien.de',initials:'TR'},
+  subject:'Bestellung Hardcover-Katalog – RM-2026-0412',
+  time:'08:40',
+  attachment:{name:'Bestellung_Hardcover_Katalog.pdf',size:'182 KB'},
+  product:'Hardcover-Katalog',
+  scanSteps:['PDF-Anhang wird gelesen<span class="ai-load"></span>','Parameter werden extrahiert<span class="ai-load"></span>'],
+  summaryDone:'<b>Hardcover-Katalog</b> erkannt · Bestellung <b>RM-2026-0412</b> · 13 Parameter vollständig übernommen.',
+  params:[
+    {name:'Bestellnummer',value:'RM-2026-0412',status:'ok',input:'text'},
+    {name:'Format',value:'DIN A4',status:'ok',input:'select',options:['DIN A4','DIN A5','DIN A4 quer','21×21 cm','24×30 cm']},
+    {name:'Umfang',value:'96 Seiten',status:'ok',input:'number',unit:'Seiten'},
+    {name:'Auflage',value:'750 Stück',status:'ok',input:'number',unit:'Stück'},
+    {name:'Innenteil Farbigkeit',value:'4/4 farbig',status:'ok',input:'select',options:['4/4 farbig','4/1','1/1 s/w']},
+    {name:'Innenteil Papier',value:'150 g/m² Bilderdruck matt',status:'ok',input:'select',options:['115 g/m² BD matt','135 g/m² BD','150 g/m² BD matt','170 g/m² BD']},
+    {name:'Bindung',value:'Klebebindung',status:'ok',input:'select',options:['Klebebindung','Fadenheftung','Klammerheftung','Wire-O']},
+    {name:'Umschlag Papier',value:'300 g/m²',status:'ok',input:'select',options:['250 g/m²','300 g/m²','350 g/m²']},
+    {name:'Umschlag Farbigkeit',value:'4/4 farbig',status:'ok',input:'select',options:['4/4 farbig','4/0']},
+    {name:'Umschlag-Veredelung',value:'Hochglanz-Laminierung',status:'ok',input:'select',options:['Matt-Laminierung','Hochglanz-Laminierung','Soft-Touch','Ohne']},
+    {name:'Sonderveredelung',value:'Spotlack auf Titel',status:'ok',input:'select',options:['Spotlack auf Titel','Prägung','Folienveredelung','Ohne']},
+    {name:'Druckdaten-Format',value:'PDF/X-4',status:'ok',input:'select',options:['PDF/X-4','PDF/X-1a','offene Daten']},
+    {name:'Liefertermin',value:'bis KW 22 (Ende Mai 2026)',status:'ok',input:'text'}
+  ],
+  replies:{
+    angebot:`Sehr geehrter Herr Richter,
+
+vielen Dank für Ihre Bestellung eines Hardcover-Katalogs (RM-2026-0412). Wir haben alle Angaben aus Ihrer PDF vollständig übernommen und prüfen aktuell die Druckdaten. Sie erhalten in Kürze unsere Auftragsbestätigung.
+
+Mit freundlichen Grüßen`,
+    rueckfrage:`Sehr geehrter Herr Richter,
+
+vielen Dank für Ihre Bestellung (RM-2026-0412). Eine kurze Rückfrage: Sollen wir Ihnen das gewünschte Andruckexemplar per Post oder als digitales Proof zusenden? Nach Ihrer Freigabe starten wir die Produktion.
+
+Mit freundlichen Grüßen`,
+    bestaetigen:`Sehr geehrter Herr Richter,
+
+vielen Dank für Ihre Bestellung (RM-2026-0412). Wir bestätigen den Auftrag:
+• Hardcover-Katalog, DIN A4, 96 Seiten, Auflage 750 Stück
+• Innenteil 4/4 farbig auf 150 g/m² Bilderdruckpapier matt
+• Umschlag 300 g/m², 4/4 farbig, Hochglanz-Laminierung, Spotlack auf Titel
+• Bindung: Klebebindung
+
+Die Lieferung erfolgt als Standardproduktion innerhalb von 4–5 Werktagen nach Freigabe. Ein Andruckexemplar senden wir Ihnen vor der Produktionsfreigabe zu. Bitte übermitteln Sie uns die Druckdaten wie angekündigt als PDF/X-4 bis zum 15.04.2026.
+
+Mit freundlichen Grüßen`
+  },
+  customer:{company:'Richter Medien GmbH',relation:'Kundennr. 20517',confidence:'99 %',
+    reason:'Absender t.richter@richter-medien.de und Firmierung „Richter Medien GmbH" (HRB 234567) stimmen mit dem Kundenstamm überein.'},
+  bufferNo:'Puffer-Nr.: MP-24818'
+};
+
+/* ═══════════ LOGIN ═══════════ */
+function doLogin(){
+  document.getElementById('login').classList.add('gone');
+  document.getElementById('app').classList.add('on');
+  setTimeout(runAnalysis,650);
+}
+
+/* ═══════════ TABS ═══════════ */
+let erpStarted=false;
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById('pane-'+name).classList.add('active');
+  if(name==='erp' && !erpStarted){ erpStarted=true; erpRun(); }
+}
+
+/* ═══════════ MAIL CARD ═══════════ */
+function paintMail(){
+  document.getElementById('mAv').textContent=DEMO.sender.initials;
+  document.getElementById('mName').textContent=DEMO.sender.name;
+  document.getElementById('mAddr').textContent=DEMO.sender.email;
+  document.getElementById('mTime').textContent=DEMO.time;
+  document.getElementById('mSubj').textContent=DEMO.subject;
+  const w=document.getElementById('mAttWrap');
+  w.innerHTML=DEMO.attachment?`<div class="mail-att"><div class="att-ico">PDF</div>
+    <div style="min-width:0"><div class="att-nm">${DEMO.attachment.name}</div><div class="att-sz">${DEMO.attachment.size}</div></div></div>`:'';
+}
+
+/* ═══════════ ANALYSE (Scan + Reveal) ═══════════ */
+let anaTimers=[];
+function clearAna(){anaTimers.forEach(clearTimeout);anaTimers=[];}
+function runAnalysis(){
+  clearAna();paintMail();
+  document.getElementById('prodWrap').hidden=true;
+  document.getElementById('paramsWrap').hidden=true;
+  document.getElementById('homeCta').hidden=true;
+  const mail=document.getElementById('mailCard');
+  const aiTxt=document.getElementById('aiTxt');
+  const aiDot=document.getElementById('aiDot');
+  aiDot.style.display='none';
+  mail.classList.add('scan');
+  const paramsBox=document.getElementById('params');
+  paramsBox.innerHTML='';
+  aiTxt.innerHTML='<span style="display:inline-flex;align-items:center;gap:8px"><span class="ai-spin"></span>'+DEMO.scanSteps[0]+'</span>';
+  anaTimers.push(setTimeout(()=>{
+    aiTxt.innerHTML='<span style="display:inline-flex;align-items:center;gap:8px"><span class="ai-spin"></span>'+DEMO.scanSteps[1]+'</span>';
+    document.getElementById('paramsWrap').hidden=false;
+    paramsBox.innerHTML=Array.from({length:5}).map(()=>'<div class="skel"></div>').join('');
+  },1100));
+  anaTimers.push(setTimeout(()=>{
+    mail.classList.remove('scan');
+    aiDot.style.display='';
+    aiTxt.innerHTML=DEMO.summaryDone;
+    document.getElementById('prodName').textContent=DEMO.product;
+    document.getElementById('prodWrap').hidden=false;
+    renderParams();
+    document.getElementById('homeCta').hidden=false;
+    generateReply(true);
+  },2300));
+}
+
+function iconFor(st){
+  if(st==='ok')   return '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+  if(st==='edit') return '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
+  return '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 3h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>';
+}
+function renderParams(){
+  const box=document.getElementById('params');
+  document.getElementById('paramsLbl').textContent='Extrahierte Parameter · '+DEMO.params.length;
+  box.innerHTML=DEMO.params.map((p,i)=>{
+    const st=p.status, lbl=st==='ok'?'Erkannt':st==='edit'?'Geändert':'Fehlt';
+    return `<div class="prow ${st==='miss'?'miss':''} ${st==='edit'?'edited':''}" style="animation-delay:${i*0.06}s" onclick="openParamEdit(${i})">
+      <div class="picon ${st}">${iconFor(st)}</div>
+      <div class="pbody"><div class="pname">${p.name}</div><div class="pval ${st==='miss'?'miss':''}">${p.value}</div></div>
+      <div class="pstat ${st}">${lbl}</div>
+      <button class="pedit" onclick="event.stopPropagation();openParamEdit(${i})" aria-label="${p.name} bearbeiten"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════ PARAMETER BEARBEITEN (typ-abhängig) ═══════════ */
+let editIdx=null,editVal=null;
+function openParamEdit(i){
+  editIdx=i;const p=DEMO.params[i];const cur=p.status==='miss'?'':p.value;editVal=cur;
+  document.getElementById('psTitle').textContent=p.name;
+  document.getElementById('psSub').textContent=p.status==='miss'?'Wert fehlt — bitte ergänzen':(p.status==='edit'?'Manuell geändert':'KI-Erkennung prüfen oder überschreiben');
+  const body=document.getElementById('psBody');
+  if(p.input==='select'&&p.options){
+    let opts=p.options.slice();
+    if(cur&&!opts.includes(cur))opts.unshift(cur);
+    body.innerHTML='<div class="optlist">'+opts.map(o=>`<div class="optrow ${o===cur?'sel':''}" onclick="pickOpt(this,'${o.replace(/'/g,"\\'")}')"><span class="optradio"></span><span class="optlabel">${o}</span></div>`).join('')+'</div>';
+  }else if(p.input==='number'){
+    const num=(p.value||'').replace(/[^0-9.]/g,'');
+    body.innerHTML=`<div class="sheet-field"><label>Wert${p.unit?' ('+p.unit+')':''}</label><input class="sheet-inp" type="number" id="psInput" value="${p.status==='miss'?'':num}" placeholder="Zahl eingeben…"></div><div class="sheet-hint">Von der KI erkannt: ${p.status==='miss'?'—':p.value}</div>`;
+    setTimeout(()=>{const el=document.getElementById('psInput');if(el){el.oninput=()=>{editVal=el.value?el.value+(p.unit?' '+p.unit:''):'';};el.focus();}},30);
+  }else{
+    body.innerHTML=`<div class="sheet-field"><label>Wert</label><input class="sheet-inp" type="text" id="psInput" value="${p.status==='miss'?'':(p.value||'')}" placeholder="Wert eingeben…"></div>`;
+    setTimeout(()=>{const el=document.getElementById('psInput');if(el){el.oninput=()=>{editVal=el.value;};el.focus();}},30);
+  }
+  document.getElementById('paramSheet').classList.add('open');
+}
+function pickOpt(el,val){document.querySelectorAll('#psBody .optrow').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');editVal=val;}
+function saveParamEdit(){
+  if(editIdx===null)return;const p=DEMO.params[editIdx];
+  let val=editVal;
+  const inp=document.getElementById('psInput');   // Zahl/Freitext: Feld ist die Wahrheit
+  if(inp){ val=inp.value.trim(); if(val && p.input==='number' && p.unit && !/[a-z]/i.test(val)) val=val+' '+p.unit; }
+  if(val!=null&&String(val).trim()!==''){p.value=String(val).trim();p.status='edit';}
+  const nm=p.name;closeParamSheet();renderParams();updateSummary();toast(nm+' aktualisiert');
+}
+function closeParamSheet(){document.getElementById('paramSheet').classList.remove('open');editIdx=null;}
+function updateSummary(){
+  const miss=DEMO.params.filter(p=>p.status==='miss').length;
+  const ok=DEMO.params.length-miss;
+  document.getElementById('aiTxt').innerHTML=`<b>${DEMO.product}</b> erkannt · ${ok} Parameter ${miss?`übernommen, <b>${miss}</b> Rückfrage offen`:'vollständig übernommen'}.`;
+}
+
+/* ═══════════ ANTWORT (Varianten je Schnellantwort) ═══════════ */
+let replyKind='angebot';
+function generateReply(silent){
+  const ta=document.getElementById('replyText');
+  const ov=document.getElementById('genOverlay');
+  if(!silent)ov.classList.add('on');
+  ta.value='';
+  setTimeout(()=>{ov.classList.remove('on');ta.value=DEMO.replies[replyKind]||DEMO.replies.angebot;},silent?400:1050);
+}
+function regenReply(){generateReply(false);}
+function pickReply(el){
+  document.querySelectorAll('#pane-antwort .chips .chip-q').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');replyKind=el.dataset.kind;generateReply(false);
+}
+function setTone(el){document.querySelectorAll('.tone .chip-q').forEach(c=>c.classList.remove('active'));el.classList.add('active');generateReply(false);}
+function insertReply(){toast('Antwort als Outlook-Entwurf eingefügt');}
+
+/* ═══════════ ERP ═══════════ */
+function erpShow(id){document.querySelectorAll('.erp-state').forEach(s=>s.classList.remove('on'));document.getElementById(id).classList.add('on');}
+function renderErpParams(){
+  document.getElementById('erpParams').innerHTML=DEMO.params.map(p=>`
+    <div class="psum-row"><span class="psum-k">${p.name}</span>
+      <span class="psum-v ${p.status==='miss'?'miss':''} ${p.status==='edit'?'edit':''}">${p.status==='miss'?'offen':p.value}</span></div>`).join('');
+}
+function erpRun(){
+  erpShow('erpIdentifying');
+  document.getElementById('cCompany').textContent=DEMO.customer.company;
+  document.getElementById('cRelation').textContent=DEMO.customer.relation;
+  document.getElementById('cConf').textContent=DEMO.customer.confidence;
+  document.getElementById('cReason').textContent=DEMO.customer.reason;
+  renderErpParams();
+  setTimeout(()=>{renderErpParams();erpShow('erpConfirm');},1650);
+}
+function erpCreate(){
+  erpShow('erpCreating');
+  document.getElementById('bufferNo').textContent=DEMO.bufferNo;
+  setTimeout(()=>erpShow('erpSuccess'),1850);
+}
+
+/* ═══════════ TOAST ═══════════ */
+let toastT;
+function toast(msg){const t=document.getElementById('toast');document.getElementById('toastMsg').textContent=msg;
+  t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);}
+
+/* init: sofort rendern (Browser + Outlook) */
+paintMail();
+/* Outlook signalisieren, dass das Add-in geladen ist (verhindert den Startfehler) */
+try { if (typeof Office !== 'undefined' && Office.onReady) Office.onReady(function(){}); } catch(e) {}
+</script>
+</body>
+</html>
